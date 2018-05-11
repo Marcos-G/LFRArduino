@@ -1,16 +1,42 @@
 #include <Arduino.h>
 
-void setup() {
-Serial1.begin(115200);
-Serial.begin(115200);
+
+void setearTimer50htz(){
+  noInterrupts(); // disable all interrupts
+  TCCR3A = 0;
+  TCCR3B = 0;
+  TCNT3 = 0;
+  OCR3A = 1250; // compare match register 16MHz/256/50Hz (20016micros)
+  TCCR3B |= (1 << WGM32); // CTC mode
+  TCCR3B |= (1 << CS32 ); // 256 prescaler
+  TIMSK3 |= (1 << OCIE3A); // enable timer compare interrupt
+  interrupts();
 }
+void setearTimer20htz(){
+  noInterrupts(); // disable all interrupts
+  TCCR4A = 0;
+  TCCR4B = 0;
+  TCNT4 = 0;
+  OCR4A = 3125; // compare match register 16MHz/256/20Hz (20016micros)
+  TCCR4B |= (1 << WGM42); // CTC mode
+  TCCR4B |= (1 << CS42 ); // 256 prescaler
+  TIMSK4 |= (1 << OCIE4A); // enable timer compare interrupt
+  interrupts();
+}
+long tiempo=0;
+
 float kp=0.0;float ki=0.0;float kd=0.0;
 float ep=0.0;float ei=0.0;float ed=0.0;
 float pos=6.0;
-int s[]={0,0,0,0,0,0,0,0,0,0,0,0};
+float preve=0.0;
+int min=1024;
+int max=0;
+float setpoint=6.0;
+int s[]={0,0,0,0,0,0};
+float posSen[]={1.2,3.1,4.7,6.4,8.0,10.0};
 void updateK(){
   if (Serial1.available()>0) {
-    String input=Serial1.readStringUntil("\n");
+    String input=Serial1.readStringUntil('\n');
     char k=input[0];
     float val=input.substring(1).toFloat();
     if(k=='P'){
@@ -25,16 +51,19 @@ void updateK(){
   }
 }
 void dataAleatoria(){
-  float preve=pos-6.00;
-  pos=pos + float(random(0,20)-10)/10;
-  if(pos>12 or pos<0)
-  pos=6.00;
-  float e=pos-6.00;
+  float prom=0;
+  float sum=0;
+  for(int a=0;a<6;a++){
+    s[a]=(analogRead(a)-min)*255.0/(max*4.0);
+    //s[a]=(analogRead(a))/4;
+    prom+=s[a]*posSen[a];
+    sum+=s[a];
+  }
+  pos=prom/sum;
+  float e=pos-setpoint;
   ep=e*kp;
   ed=(e-preve)*kd;
-  for(int i=0;i<12;i++){
-    s[i]=random(0,255);
-  }
+  preve=e;
 
 }
 void sendState(){
@@ -47,7 +76,6 @@ void sendState(){
   msg+=(F(",\"KD\":"));
   msg+=(kd);
   msg+=(",");
-
   msg+=(F("\"POS\":"));
   msg+=(pos);
   msg+=(F(",\"EP\":"));
@@ -67,7 +95,7 @@ void sendState(){
   msg+=(F(",\"S4\":"));
   msg+=(s[4]);
   msg+=(F(",\"S5\":"));
-  msg+=(s[5]);
+  msg+=(s[5]);/*
   msg+=(F(",\"S6\":"));
   msg+=(s[6]);
   msg+=(F(",\"S7\":"));
@@ -77,16 +105,37 @@ void sendState(){
   msg+=(F(",\"S9\":"));
   msg+=(s[9]);
   msg+=(F(",\"S10\":"));
-  msg+=(s[10]);
+  msg+=(s[10]);*/
   msg+=("}\n");
   Serial1.print(msg);
 }
-unsigned long time=0;
-void loop() {
-updateK();
-dataAleatoria();
-if(time<(millis()-50)){
-  sendState();
-time=millis();
+ISR(TIMER3_COMPA_vect) // timer compare interrupt service routine
+{
+  dataAleatoria();
 }
+ISR(TIMER4_COMPA_vect) // timer compare interrupt service routine
+{
+  sendState();
+}
+void setup() {
+Serial1.begin(115200);
+Serial.begin(115200);
+setearTimer50htz();
+setearTimer20htz();
+}
+void loop() {
+  if(millis()<10000){
+    for(int a=0;a<6;a++){
+      int sen=analogRead(a)/4;
+      if(sen>max){
+        max=sen;
+      }
+      if(sen<min){
+        min=sen;
+      }
+    }
+  }
+updateK();
+//dataAleatoria();
+
 }
