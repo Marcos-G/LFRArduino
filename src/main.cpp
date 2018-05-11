@@ -68,7 +68,7 @@ void dataAleatoria(){
 }
 void sendState(){
   String msg="{";
-
+///
   msg+=(F("\"KP\":"));
   msg+=(kp);
   msg+=(F(",\"KI\":"));
