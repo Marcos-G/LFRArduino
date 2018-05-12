@@ -29,9 +29,10 @@ float kp=0.0;float ki=0.0;float kd=0.0;
 float ep=0.0;float ei=0.0;float ed=0.0;
 float pos=6.0;
 float preve=0.0;
-int min=1024;
-int max=0;
+int max[]={0,0,0,0,0,0};
+int min[]={1024,1024,1024,1024,0,0};
 float setpoint=6.0;
+bool calibrado=false;
 int s[]={0,0,0,0,0,0};
 float posSen[]={1.2,3.1,4.7,6.4,8.0,10.0};
 void updateK(){
@@ -50,11 +51,11 @@ void updateK(){
     }
   }
 }
-void dataAleatoria(){
+void pidCalc(){
   float prom=0;
   float sum=0;
   for(int a=0;a<6;a++){
-    s[a]=(analogRead(a)-min)*255.0/(max*4.0);
+    s[a]=((analogRead(a)-min[a])*255.0/max[a]);
     //s[a]=(analogRead(a))/4;
     prom+=s[a]*posSen[a];
     sum+=s[a];
@@ -65,6 +66,22 @@ void dataAleatoria(){
   ed=(e-preve)*kd;
   preve=e;
 
+}
+void calibrar(){
+  if(millis()<10000){
+    for(int a=0;a<6;a++){
+      int sen=analogRead(a);
+      if(sen>max[a]){
+        max[a]=sen;
+      }
+      if(sen<min[a]){
+        min[a]=sen;
+      }
+    }
+  }
+  else{
+    calibrado=true;
+  }
 }
 void sendState(){
   String msg="{";
@@ -111,7 +128,8 @@ void sendState(){
 }
 ISR(TIMER3_COMPA_vect) // timer compare interrupt service routine
 {
-  dataAleatoria();
+  if(calibrado)
+  pidCalc();
 }
 ISR(TIMER4_COMPA_vect) // timer compare interrupt service routine
 {
@@ -124,17 +142,8 @@ setearTimer50htz();
 setearTimer20htz();
 }
 void loop() {
-  if(millis()<10000){
-    for(int a=0;a<6;a++){
-      int sen=analogRead(a)/4;
-      if(sen>max){
-        max=sen;
-      }
-      if(sen<min){
-        min=sen;
-      }
-    }
-  }
+  if(!calibrado)
+  calibrar();
 updateK();
 //dataAleatoria();
 
